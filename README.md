@@ -1,4 +1,4 @@
 # livegroove
 
-# For requirments
+# For requirements
 pip install -r requirements.txt
