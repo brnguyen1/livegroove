@@ -6,3 +6,6 @@ venv/
 
 # Environment variables file
 .env
+
+# Python Cache
+.cache

@@ -2,10 +2,12 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import json
 import os
+from dotenv import load_dotenv
 
 # Set up your credentials
-client_id = os.environ.get("CLIENT_ID")
-client_secret = os.environ.get("CLIENT_SECRET")
+load_dotenv()
+client_id = os.getenv("CLIENT_ID")
+client_secret = os.getenv("CLIENT_SECRET")
 redirect_uri = 'http://localhost:8000/'
 
 # Set up Spotify API connection
