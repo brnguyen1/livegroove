@@ -3,3 +3,4 @@
 # Spotipy library
 spotipy==2.23.0
 python-dotenv==0.19.2
+flask==3.0.0
