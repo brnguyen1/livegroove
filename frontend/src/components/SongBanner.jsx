@@ -1,15 +1,14 @@
 
-export default function SongBanner(){
-
+export default function SongBanner(props){
+    let { image, song_name } = props
     return(
-    <div className="flex border-2 rounded h-12 w-3/5 m-auto">
-        <div className="bg-green-700 w-1/5 h-full mr-auto">
+    <div className="flex border-2 rounded h-12 w-4/5 m-auto">
+        <div className="bg-green-700 w-1/5 h-full mr-auto" />
             
-        </div>
         <div className="flex w-4/5">
             <div className="flex w-5/6 m-auto">
                 <span className="m-auto">
-                    Song
+                    {song_name}
                 </span>
             </div>
             
