@@ -1,12 +1,15 @@
 import { useState } from "react";
 import SongBanner from "./SongBanner";
 import { Rating } from "@mui/material";
+import { sendRating } from "../api/api";
 
-export default function SongDisplay() {
+export default function SongDisplay(props) {
+    let {session_id} = props;
     const [rating, setRating] = useState(0)
     
     function changeRating(new_rating){
         setRating(new_rating);
+        sendRating(session_id, 1, rating)
     }
 
     return(
