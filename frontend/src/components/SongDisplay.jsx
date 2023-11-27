@@ -16,7 +16,7 @@ export default function SongDisplay() {
 
                 </div>
                 <div className="grid grid-cols-11 h-1/5">
-                    <div className="flex col-start-6 m-auto">
+                    <div className="flex col-start-5 col-span-3 m-auto">
                         <Rating
                             value={rating}
                             onChange={(event, new_rating) => {
