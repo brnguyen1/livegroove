@@ -12,9 +12,20 @@ gunicorn backend:app
 ```
 
 ## Frontend
+### Local Testing
 ``` 
 npm install;
 npm run dev;
+```
+
+### Deployment
+```
+npm run build
+```
+### Environment Vars
+```
+VITE_BACKEND_URL=<local/production URL>
+
 ```
 
 ## For requirements
