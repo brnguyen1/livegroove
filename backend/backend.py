@@ -14,18 +14,29 @@ CORS(app)
 #     # Create tables if they don't exist
 #     cursor.execute("""
 #     CREATE TABLE IF NOT EXISTS sessions (
-#         session_id INTEGER PRIMARY KEY AUTOINCREMENT,
-#         session_name TEXT NOT NULL
+#         session_id SERIAL PRIMARY KEY,
+#         session_name VARCHAR
+#     )
+#     """)
+
+#     cursor.execute("""
+#     CREATE TABLE IF NOT EXISTS users (
+#         user_id SERIAL PRIMARY KEY
 #     )
 #     """)
     
 #     cursor.execute("""
 #     CREATE TABLE IF NOT EXISTS ratings (
-#         user_id INTEGER,
-#         session_id INTEGER,
+#         user_id SERIAL,
+#         session_id SERIAL,
 #         song_id INTEGER,
 #         rating INTEGER,
-#         PRIMARY KEY (user_id, session_id, song_id)
+#         CONSTRAINT fk_sessions
+#         FOREIGN KEY(session_id) 
+#	      REFERENCES sessions(sessions_id),
+#         CONSTRAINT fk_users
+#         FOREIGN KEY(user_id)
+#         REFERENCES users(user_id)
 #     )
 #     """)
 
@@ -36,6 +47,9 @@ CORS(app)
 # init_db()
 
 # API endpoints
+
+# am i allowed global variables here?
+active_sessions = {}
 
 @app.route('/sessions', methods=['POST'])
 def create_session():
@@ -49,6 +63,8 @@ def create_session():
     session_id = cursor.lastrowid
     conn.commit()
     conn.close()
+    
+    active_sessions[session_id] = False
 
     return jsonify({'session_id': session_id})
 
@@ -56,12 +72,31 @@ def create_session():
 def join_session(session_id):
     # Join a session
     # Add your logic to keep track of user info
-    return jsonify({'message': 'Joined session successfully'})
+
+    # Once user joins the session, add a user id
+    # how to assign rating to a user?
+
+    # When the user presses a button and uses the add rating call, 
+    # their user id needs to be present
+
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO user (user_id) VALUES (DEFAULT)")
+    user_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+
+    # send user id and status in message
+    # need to keep track of this user id in the browser and attach it to the button event
+    # when button is clicked, send user_id as part of adding rating
+    return jsonify({'message': 'Joined session successfully', 'user_id': user_id, 'session_status': active_sessions[session_id]})
 
 @app.route('/sessions/<int:session_id>', methods=['POST'])
 def start_session(session_id):
     # Start a session
     # Add your logic for starting a session
+
+    active_sessions[session_id] = True
     return jsonify({'message': 'Session started successfully'})
 
 # @app.route('/ratings', methods=['POST'])
