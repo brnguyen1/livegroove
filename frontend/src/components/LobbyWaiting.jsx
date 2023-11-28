@@ -1,11 +1,6 @@
-import { startSession } from "../api/api"
 
 export default function LobbyWaiting(props){
-    let { session_id } = props
-
-    const onStart = () => {
-        startSession(session_id)
-    }
+    let { onStart } = props
 
     return(
         <div className="flex flex-col border border-2 h-2/3 w-1/2 m-auto">

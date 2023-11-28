@@ -1,11 +1,12 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-# import sqlite3
+from collections import defaultdict
+import sqlite3
 
 app = Flask(__name__)
 CORS(app)
 # SQLite database setup
-# DATABASE = "database.db"
+DATABASE = "database.db"
 
 # def init_db():
 #     conn = sqlite3.connect(DATABASE)
@@ -33,7 +34,7 @@ CORS(app)
 #         rating INTEGER,
 #         CONSTRAINT fk_sessions
 #         FOREIGN KEY(session_id) 
-#	      REFERENCES sessions(sessions_id),
+# 	      REFERENCES sessions(sessions_id),
 #         CONSTRAINT fk_users
 #         FOREIGN KEY(user_id)
 #         REFERENCES users(user_id)
@@ -50,6 +51,7 @@ CORS(app)
 
 # am i allowed global variables here?
 active_sessions = {}
+session_users = defaultdict(int)
 
 @app.route('/sessions', methods=['POST'])
 def create_session():
@@ -79,12 +81,15 @@ def join_session(session_id):
     # When the user presses a button and uses the add rating call, 
     # their user id needs to be present
 
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO user (user_id) VALUES (DEFAULT)")
-    user_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
+    # conn = sqlite3.connect(DATABASE)
+    # cursor = conn.cursor()
+    # cursor.execute("INSERT INTO user (user_id) VALUES ('DEFAULT')")
+    # user_id = cursor.lastrowid
+    # conn.commit()
+    # conn.close()
+    
+    session_users[session_id] += 1
+    user_id = session_users[session_id]
 
     # send user id and status in message
     # need to keep track of this user id in the browser and attach it to the button event
