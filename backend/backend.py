@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, make_response, render_template
 from flask_cors import CORS
 from collections import defaultdict
 import psycopg2
+import numpy as np
 from psycopg2 import sql
 import os
 from spotify_api import get_all_playlist_tracks, read_playlist_sp
@@ -68,7 +69,7 @@ def get_db_connection():
 active_sessions = {}
 session_users = defaultdict(int)
 rated_songs = []
-top_songs = []
+top_songs = {}
 
 @app.route('/sessions', methods=['POST'])
 def create_session():
@@ -191,11 +192,10 @@ def add_rating():
         print("AVERAGE:::", average_rating)
         # -----------------------------------------------------------------------------------------
         #COS SIM
-        global rated_songs
+        global rated_songs 
+        song_recommend = {}
         rated_songs.append(song_id)
         catalog_rated = []
-        cursor.execute("SELECT rating FROM ratings WHERE song_id = (%s)", (song_id,))
-        song_just_rated = cursor.fetchall()
         # get list of song_ids in session, loop through to get ratings of that is not equal to song_id
         cursor.execute("SELECT DISTINCT song_id FROM ratings")
         song_ids = cursor.fetchall()
@@ -203,9 +203,19 @@ def add_rating():
             cursor.execute("SELECT rating FROM ratings WHERE song_id = (%s)", (song_id,))
             catalog_rated.append(cursor.fetchall())
         
-        print(catalog_rated)
-
+        for song in rated_songs:
+            cursor.execute("SELECT rating FROM ratings WHERE song_id = (%s)", (song,))
+            compare_ratings = cursor.fetchall()
+            
+        rating_arr = np.array(compare_ratings)
+        catalog_arr = np.array(catalog_rated)
+        for i, items_scores in enumerate(catalog_arr):
+            itemB = np.array(items_scores)
+            song_recommend[i] = np.dot(rating_arr, itemB) / np.linalg.norm(rating_arr) * np.linalg.norm(itemB)
     
+    sorted_song_recommend =  dict(sorted(song_recommend.items(), key=lambda item: item[1], reverse=True))
+    global top_songs
+    top_songs = dict(sorted_song_recommend[:3])
     conn.commit()
     conn.close()
 
@@ -272,7 +282,6 @@ def update_songs_cf(session_id):
 
 @app.route('/sessions/<int:session_id>/select-song/<int:song_id>', methods=['POST'])
 def select_song(session_id, song_id):
-    global top_songs
     # select song that will play next
     # used to track history of songs played to avoid redunant recommendations
     return 0
