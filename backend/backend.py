@@ -52,19 +52,34 @@ DATABASE = "database.db"
 # am i allowed global variables here?
 active_sessions = {}
 session_users = defaultdict(int)
+session_ids = defaultdict(str)
+session_names = defaultdict(int)
+user_ids_sessions = {}
+session_id = 0
+user_id = 0
 
 @app.route('/sessions', methods=['POST'])
 def create_session():
     # Create a new session
+    session_id += 1
     data = request.get_json()
     session_name = data.get('session_name')
-    
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO sessions (session_name) VALUES (?)", (session_name,))
-    session_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
+    # error handling
+    session_names[session_name] = session_id
+    try:
+        user_id = request.cookies.get('user_id')
+        user_ids_sessions[session_id] = [user_id]
+    except:
+        user_id += 1
+        reponse = Flask.make_response()
+        reponse.set_cookies('user_id', value=user_id)
+        user_ids_sessions[session_id] = [user_id]
+    # conn = sqlite3.connect(DATABASE)
+    # cursor = conn.cursor()
+    # cursor.execute("INSERT INTO sessions (session_name) VALUES (?)", (session_name,))
+    # session_id = cursor.lastrowid
+    # conn.commit()
+    # conn.close()
     
     active_sessions[session_id] = False
 
@@ -100,7 +115,6 @@ def join_session(session_id):
 def start_session(session_id):
     # Start a session
     # Add your logic for starting a session
-
     active_sessions[session_id] = True
     return jsonify({'message': 'Session started successfully'})
 
@@ -140,6 +154,23 @@ def start_session(session_id):
 #     return jsonify({'rating_vectors': rating_vectors})
 
 # Add more endpoints as needed
+
+@app.route('/sessions/songs', methods=['GET'])
+def display_songs():
+    # used to display info of songs that haven't been played
+    return 0
+
+@app.route('/sessions/<int:session_id>/ratings/<int:song_id>', methods=['POST','PUT'])
+def update_songs_cf(session_id, song_id):
+    # update song in session ratings vector
+    # update user-user CF model every x requests
+    return 0
+
+@app.route('/sessions/<int:session_id>/select-song/<int:song_id>', methods=['POST'])
+def select_song(session_id, song_id):
+    # select song that will play next
+    # used to track history of songs played to avoid redunant recommendations
+    return 0
 
 if __name__ == '__main__':
     app.run(debug=True)
