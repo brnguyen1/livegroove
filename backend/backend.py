@@ -1,16 +1,31 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response, render_template
 from flask_cors import CORS
 from collections import defaultdict
+import psycopg2
+from psycopg2 import sql
+import os
 import sqlite3
 
 app = Flask(__name__)
 CORS(app)
 # SQLite database setup
-DATABASE = "database.db"
 
-# def init_db():
-#     conn = sqlite3.connect(DATABASE)
-#     cursor = conn.cursor()
+def get_db_connection():
+    try:
+        conn = psycopg2.connect(
+            host="dpg-cldohdvgsrdc73flft6g-a.ohio-postgres.render.com",
+            database="livegroove_sessions",
+            user="livegroove_sessions_user",
+            password=os.getenv("DB_PASS")
+        )
+        print("Connection Successful")
+        return conn
+    except psycopg2.Error as e:
+        print(f"Error connecting to database: {e}")
+        print("Connection not Successful")
+        return None
+    # conn = sqlite3.connect(DATABASE)
+    # cursor = conn.cursor()
 
 #     # Create tables if they don't exist
 #     cursor.execute("""
@@ -52,35 +67,39 @@ DATABASE = "database.db"
 # am i allowed global variables here?
 active_sessions = {}
 session_users = defaultdict(int)
-session_ids = defaultdict(str)
-session_names = defaultdict(int)
-user_ids_sessions = {}
-session_id = 0
-user_id = 0
+
 
 @app.route('/sessions', methods=['POST'])
 def create_session():
     # Create a new session
-    session_id += 1
     data = request.get_json()
     session_name = data.get('session_name')
     # error handling
-    session_names[session_name] = session_id
-    try:
-        user_id = request.cookies.get('user_id')
-        user_ids_sessions[session_id] = [user_id]
-    except:
-        user_id += 1
-        reponse = Flask.make_response()
-        reponse.set_cookies('user_id', value=user_id)
-        user_ids_sessions[session_id] = [user_id]
-    # conn = sqlite3.connect(DATABASE)
-    # cursor = conn.cursor()
-    # cursor.execute("INSERT INTO sessions (session_name) VALUES (?)", (session_name,))
-    # session_id = cursor.lastrowid
-    # conn.commit()
-    # conn.close()
-    
+    cookie_user_id = request.cookies.get('user_id')
+    if not (cookie_user_id is None):
+        #This is an old user
+        print("COOKIEEE", cookie_user_id)
+    else:
+        #This is a new user
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO users (user_id) VALUES (DEFAULT)")
+        user_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        response = make_response('Resposne')
+        response.set_cookie('user_id', value=str(user_id))
+        print("USER ID", user_id)
+
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""INSERT INTO sessions (session_name) VALUES (%s) RETURNING session_id""", (session_name,))
+    session_id = cursor.fetchall()[0]
+    conn.commit()
+    conn.close()
+
+    global active_sessions
     active_sessions[session_id] = False
 
     return jsonify({'session_id': session_id})
@@ -96,15 +115,24 @@ def join_session(session_id):
     # When the user presses a button and uses the add rating call, 
     # their user id needs to be present
 
-    # conn = sqlite3.connect(DATABASE)
-    # cursor = conn.cursor()
-    # cursor.execute("INSERT INTO user (user_id) VALUES ('DEFAULT')")
-    # user_id = cursor.lastrowid
-    # conn.commit()
-    # conn.close()
+    cookie_user_id = request.cookies.get('user_id')
+    if not (cookie_user_id is None):
+        #This is an old user
+        print("COOKIE", cookie_user_id)
+    else:
+        #This is a new user
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO users (user_id) VALUES (DEFAULT)")
+        user_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        response = make_response('Resposne')
+        response.set_cookie('user_id', value=str(user_id))
+        print("USER ID", user_id)
+
     
-    session_users[session_id] += 1
-    user_id = session_users[session_id]
+
 
     # send user id and status in message
     # need to keep track of this user id in the browser and attach it to the button event
@@ -118,25 +146,34 @@ def start_session(session_id):
     active_sessions[session_id] = True
     return jsonify({'message': 'Session started successfully'})
 
-# @app.route('/ratings', methods=['POST'])
-# def add_rating():
-#     # Add or update a rating
-#     data = request.get_json()
-#     user_id = data.get('user_id')
-#     session_id = data.get('session_id')
-#     song_id = data.get('song_id')
-#     rating = data.get('rating')
+@app.route('/ratings', methods=['POST'])
+def add_rating():
+    # Add or update a rating
+    data = request.get_json()
+    user_id = data.get('user_id')
+    session_id = data.get('session_id')
+    song_id = data.get('song_id')
+    rating = data.get('rating')
 
-#     conn = sqlite3.connect(DATABASE)
-#     cursor = conn.cursor()
-#     cursor.execute("""
-#         INSERT OR REPLACE INTO ratings (user_id, session_id, song_id, rating)
-#         VALUES (?, ?, ?, ?)
-#     """, (user_id, session_id, song_id, rating))
-#     conn.commit()
-#     conn.close()
 
-#     return jsonify({'message': 'Rating added/updated successfully'})
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM ratings WHERE user_id = (%s) AND song_id = (%s)", (user_id, song_id,))
+    try:
+        isDup = cursor.fetchall()[0]
+    except:
+        isDup = None
+    
+    if isDup:
+        cursor.execute("UPDATE ratings SET user_id = (%s), session_id = (%s), song_id = (%s), rating = (%s) WHERE user_id = (%s) AND song_id = (%s)", (user_id, session_id,song_id,rating,user_id,song_id,))
+    else:
+        cursor.execute("INSERT INTO ratings (user_id, session_id, song_id, rating) VALUES (%s,%s,%s,%s)", (user_id,session_id,song_id,rating,))
+
+    # cursor.execute("INSERT INTO ratings (user_id, session_id, song_id, rating) VALUES (%s,%s,%s,%s) ON CONFLICT (user_id, session_id, song_id) DO UPDATE SET user_id = EXCLUDED.user_id, session_id = EXCLUDED.session_id, song_id = EXCLUDED.song_id, rating = EXCLUDED.rating", (user_id,session_id,song_id,rating,) )
+    conn.commit()
+    conn.close()
+
+    return jsonify({'message': 'Rating added/updated successfully'})
 
 # @app.route('/ratings/<int:session_id>', methods=['GET'])
 # def get_rating_vectors(session_id):
@@ -160,10 +197,25 @@ def display_songs():
     # used to display info of songs that haven't been played
     return 0
 
-@app.route('/sessions/<int:session_id>/ratings/<int:song_id>', methods=['POST','PUT'])
-def update_songs_cf(session_id, song_id):
+# @app.route('/sessions/<int:session_id>/ratings/<int:song_id>', methods=['POST','PUT'])
+@app.route('/sessions/<int:session_id>/ratings', methods=['POST','PUT'])
+def update_songs_cf(session_id):
     # update song in session ratings vector
     # update user-user CF model every x requests
+    user_ratings = []
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    # getting all rating of a user from a session
+    cursor.execute("SELECT DISTINCT user_id FROM ratings WHERE session_id = (%s)", (session_id,))
+    array_users = cursor.fetchall()
+
+    for i in range(0, len(array_users)):
+        cursor.execute("SELECT * FROM ratings WHERE user_id = (%s) AND session_id = (%s)", (array_users[i], session_id,))
+        user_ratings.append(cursor.fetchall())
+    print(user_ratings)
+
+    conn.commit()
+    conn.close()
     return 0
 
 @app.route('/sessions/<int:session_id>/select-song/<int:song_id>', methods=['POST'])
@@ -171,6 +223,14 @@ def select_song(session_id, song_id):
     # select song that will play next
     # used to track history of songs played to avoid redunant recommendations
     return 0
+
+
+@app.route('/', methods=['GET'])
+def index():
+    conn = get_db_connection()
+    conn.close()
+
+
 
 if __name__ == '__main__':
     app.run(debug=True)
