@@ -24,7 +24,7 @@ def get_all_playlist_tracks(sp, playlist_id):
             break
         
         for track in tracks:
-            all_tracks.extend((track['track']['name'], track['track']['album']['images'][2]['url']))
+            all_tracks.append((track['track']['name'], track['track']['album']['images'][2]['url'], track['track']['album']['artists'][0]['name']))
 
         offset += limit
 
@@ -39,7 +39,7 @@ fields='items(track(name))'
 
 
 tracks = get_all_playlist_tracks(sp, playlist_id)
-print(len(tracks))
+# print(tracks[122])
 for i in range(len(tracks)):
-    print(tracks[i])
+    print(i, tracks[i])
 

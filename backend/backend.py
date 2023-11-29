@@ -201,7 +201,8 @@ def display_songs():
 @app.route('/sessions/<int:session_id>/ratings', methods=['POST','PUT'])
 def update_songs_cf(session_id):
     # update song in session ratings vector
-    # update user-user CF model every x requests
+    #create a user-item matrix
+    #
     user_ratings = []
     conn = get_db_connection()
     cursor = conn.cursor()
