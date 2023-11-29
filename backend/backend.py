@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, make_response, render_template
 from flask_cors import CORS
 from collections import defaultdict
 import psycopg2
+import numpy as np
 from psycopg2 import sql
 import os
 from spotify_api import get_all_playlist_tracks, read_playlist_sp
@@ -67,19 +68,15 @@ def get_db_connection():
 # am i allowed global variables here?
 active_sessions = {}
 session_users = defaultdict(int)
-
+rated_songs = []
+top_songs = {}
 
 @app.route('/sessions', methods=['POST'])
 def create_session():
     # Create a new session
     data = request.get_json()
     session_name = data.get('session_name')
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""INSERT INTO sessions (session_name) VALUES (%s) RETURNING session_id""", (session_name,))
-    session_id = cursor.fetchall()[0]
-    conn.commit()
-    conn.close()
+
     # error handling
     cookie_user_id = request.cookies.get('user_id')
     if not (cookie_user_id is None):
@@ -104,8 +101,12 @@ def create_session():
         conn.commit()
         conn.close()
 
-
-
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""INSERT INTO sessions (session_name) VALUES (%s) RETURNING session_id""", (session_name,))
+    session_id = cursor.fetchall()[0]
+    conn.commit()
+    conn.close()
 
     global active_sessions
     active_sessions[session_id] = False
@@ -169,6 +170,9 @@ def add_rating():
     session_id = data.get('session_id')
     song_id = data.get('song_id')
     rating = data.get('rating')
+    
+    global rated_songs
+    rated_songs.append(song_id)
 
 
     conn = get_db_connection()
@@ -184,28 +188,59 @@ def add_rating():
     else:
         cursor.execute("INSERT INTO ratings (user_id, session_id, song_id, rating) VALUES (%s,%s,%s,%s)", (user_id,session_id,song_id,rating,))
 
-    # cursor.execute("INSERT INTO ratings (user_id, session_id, song_id, rating) VALUES (%s,%s,%s,%s) ON CONFLICT (user_id, session_id, song_id) DO UPDATE SET user_id = EXCLUDED.user_id, session_id = EXCLUDED.session_id, song_id = EXCLUDED.song_id, rating = EXCLUDED.rating", (user_id,session_id,song_id,rating,) )
+    
+    
+    cursor.execute("SELECT rating FROM ratings WHERE session_id = (%s) AND song_id = (%s)", (session_id,song_id,))
+    ratings = cursor.fetchall()
+    if any(0 in item for item in ratings):
+        # Dont do math yet
+        print("Still waiting on other users in session to rate song...")
+    else:
+        # Do Math
+        # AVG RATING
+        average_rating = 0
+        for i in range(0, len(ratings)):
+            average_rating += int(ratings[i][0])
+        average_rating = float(average_rating)/float(len(ratings))
+        # r_u,j ->
+        print("AVERAGE:::", average_rating)
+        # -----------------------------------------------------------------------------------------
+        #COS SIM
+        global rated_songs 
+        song_recommend = {}
+        rated_songs.append(song_id)
+        catalog_rated = []
+        # get list of song_ids in session, loop through to get ratings of that is not equal to song_id
+        cursor.execute("SELECT DISTINCT song_id FROM ratings")
+        song_ids = cursor.fetchall()
+        if rated_songs not in song_ids:
+            cursor.execute("SELECT rating FROM ratings WHERE song_id = (%s)", (song_id,))
+            catalog_rated.append(cursor.fetchall())
+        
+        for song in rated_songs:
+            cursor.execute("SELECT rating FROM ratings WHERE song_id = (%s)", (song,))
+            compare_ratings = cursor.fetchall()
+            
+        rating_arr = np.array(compare_ratings)
+        catalog_arr = np.array(catalog_rated)
+        for i, items_scores in enumerate(catalog_arr):
+            itemB = np.array(items_scores)
+            song_recommend[i] = np.dot(rating_arr, itemB) / np.linalg.norm(rating_arr) * np.linalg.norm(itemB)
+    
+    sorted_song_recommend =  dict(sorted(song_recommend.items(), key=lambda item: item[1], reverse=True))
+    global top_songs
+    global have_not_listened
+    songs_want = []
+    top_songs = dict(sorted_song_recommend[:3])
+    i = 0
+    for key in sorted_song_recommend:
+        if i == 3:
+            break
+        if key in have_not_listened:
+            songs_want[key] = have_not_listened[key]
+            i += 1
 
-
-    # update recommendation vector
-    # vector of vectors of all user ratings in session
-    # calculate average rating of song just played (the songid attached to the rating)
-    # by taking the sum of all vector entries at songid (the current vec of vecs is array and not dict)
-    # have to check if all users rated before playing next song or indices won't line up.
-
-
-    # check if song has been played
-
-    # 
-    cursor.execute("SELECT DISTINCT user_id FROM ratings WHERE session_id = (%s)", (session_id,))
-    array_users = cursor.fetchall()
-
-    for i in range(0, len(array_users)):
-        cursor.execute("SELECT * FROM ratings WHERE user_id = (%s) AND session_id = (%s)", (array_users[i], session_id,))
-        user_ratings.append(cursor.fetchall())
-    print(user_ratings)
-    # user_ratings is an array of arrays of length 123 containing all ratings for that user 
-
+    top_songs = songs_want
 
     conn.commit()
     conn.close()
@@ -241,12 +276,14 @@ def display_songs(session_id):
     conn.commit()
     conn.close()
     
+    
 
     all_songs = get_all_playlist_tracks(read_playlist_sp(), "spotify:playlist:6wj42BHCJPop77cj6JgfLH")
-    have_not_listened = []
+    # needs testing
+    have_not_listened = {}
     for i in range(0, len(all_songs)):
         if not any(i in item for item in array_songs):
-            have_not_listened.append(all_songs[i])
+            have_not_listened[i] = all_songs[i]
     return jsonify({'songs_left': have_not_listened})
 
 # @app.route('/sessions/<int:session_id>/ratings/<int:song_id>', methods=['POST','PUT'])
@@ -276,14 +313,21 @@ def select_song(session_id, song_id):
     # select song that will play next
     # used to track history of songs played to avoid redunant recommendations
     # only modify has_not_been_listened
+    global top_songs
+
+     
+    global have_not_listened
+    for key in have_not_listened:
+        if key == song_id:
+            del have_not_listened[key]
     return jsonify({'message': "Song marked as listened to!"})
 
 @app.route('/recommendations', methods=['GET'])
 def get_recs():
 
-
-    # return jsonify({'top_3': })
-    return 0
+    global top_songs
+    # getting ints already sorted name, image, and artist of the top 3 tracks
+    return jsonify({'top3': top_songs})
 
 
 
