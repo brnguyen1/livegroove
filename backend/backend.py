@@ -74,6 +74,12 @@ def create_session():
     # Create a new session
     data = request.get_json()
     session_name = data.get('session_name')
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""INSERT INTO sessions (session_name) VALUES (%s) RETURNING session_id""", (session_name,))
+    session_id = cursor.fetchall()[0]
+    conn.commit()
+    conn.close()
     # error handling
     cookie_user_id = request.cookies.get('user_id')
     if not (cookie_user_id is None):
@@ -83,21 +89,23 @@ def create_session():
         #This is a new user
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (user_id) VALUES (DEFAULT)")
-        user_id = cursor.lastrowid
+        cursor.execute("INSERT INTO users (user_id) VALUES (DEFAULT) RETURNING user_id")
+        user_id = cursor.fetchone()[0]
         conn.commit()
         conn.close()
         response = make_response('Resposne')
         response.set_cookie('user_id', value=str(user_id))
         print("USER ID", user_id)
+        #initialize ratings for user
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        for i in range(0, 123):
+            cursor.execute("""INSERT INTO ratings(user_id, song_id, rating, session_id) VALUES (%s, %s, %s, %s)""", (user_id, i, 0, session_id,))
+        conn.commit()
+        conn.close()
 
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""INSERT INTO sessions (session_name) VALUES (%s) RETURNING session_id""", (session_name,))
-    session_id = cursor.fetchall()[0]
-    conn.commit()
-    conn.close()
+
 
     global active_sessions
     active_sessions[session_id] = False
@@ -123,13 +131,20 @@ def join_session(session_id):
         #This is a new user
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (user_id) VALUES (DEFAULT)")
-        user_id = cursor.lastrowid
+        cursor.execute("INSERT INTO users (user_id) VALUES (DEFAULT) RETURNING user_id")
+        user_id = cursor.fetchone()[0]
         conn.commit()
         conn.close()
         response = make_response('Resposne')
         response.set_cookie('user_id', value=str(user_id))
         print("USER ID", user_id)
+        #initialize ratings for user
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        for i in range(0, 123):
+            cursor.execute("""INSERT INTO ratings(user_id, song_id, rating, session_id) VALUES (%s, %s, %s, %s)""", (user_id, i, 0, session_id,))
+        conn.commit()
+        conn.close()
 
     
 
@@ -170,9 +185,32 @@ def add_rating():
         cursor.execute("INSERT INTO ratings (user_id, session_id, song_id, rating) VALUES (%s,%s,%s,%s)", (user_id,session_id,song_id,rating,))
 
     # cursor.execute("INSERT INTO ratings (user_id, session_id, song_id, rating) VALUES (%s,%s,%s,%s) ON CONFLICT (user_id, session_id, song_id) DO UPDATE SET user_id = EXCLUDED.user_id, session_id = EXCLUDED.session_id, song_id = EXCLUDED.song_id, rating = EXCLUDED.rating", (user_id,session_id,song_id,rating,) )
+
+
+    # update recommendation vector
+    # vector of vectors of all user ratings in session
+    # calculate average rating of song just played (the songid attached to the rating)
+    # by taking the sum of all vector entries at songid (the current vec of vecs is array and not dict)
+    # have to check if all users rated before playing next song or indices won't line up.
+
+
+    # check if song has been played
+
+    # 
+    cursor.execute("SELECT DISTINCT user_id FROM ratings WHERE session_id = (%s)", (session_id,))
+    array_users = cursor.fetchall()
+
+    for i in range(0, len(array_users)):
+        cursor.execute("SELECT * FROM ratings WHERE user_id = (%s) AND session_id = (%s)", (array_users[i], session_id,))
+        user_ratings.append(cursor.fetchall())
+    print(user_ratings)
+    # user_ratings is an array of arrays of length 123 containing all ratings for that user 
+
+
     conn.commit()
     conn.close()
 
+    # return recommendation vector
     return jsonify({'message': 'Rating added/updated successfully'})
 
 # @app.route('/ratings/<int:session_id>', methods=['GET'])
@@ -213,33 +251,39 @@ def display_songs(session_id):
 
 # @app.route('/sessions/<int:session_id>/ratings/<int:song_id>', methods=['POST','PUT'])
 @app.route('/sessions/<int:session_id>/ratings', methods=['POST','PUT'])
-def update_songs_cf(session_id):
-    # update song in session ratings vector
-    #create a user-item matrix
-    #
-    user_ratings = []
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    # getting all rating of a user from a session
-    cursor.execute("SELECT DISTINCT user_id FROM ratings WHERE session_id = (%s)", (session_id,))
-    array_users = cursor.fetchall()
+# def update_songs_cf(session_id):
+#     # update song in session ratings vector
+#     #create a user-item matrix
+#     #
+#     user_ratings = []
+#     conn = get_db_connection()
+#     cursor = conn.cursor()
+#     # getting all rating of a user from a session
+#     cursor.execute("SELECT DISTINCT user_id FROM ratings WHERE session_id = (%s)", (session_id,))
+#     array_users = cursor.fetchall()
 
-    for i in range(0, len(array_users)):
-        cursor.execute("SELECT * FROM ratings WHERE user_id = (%s) AND session_id = (%s)", (array_users[i], session_id,))
-        user_ratings.append(cursor.fetchall())
-    print(user_ratings)
+#     for i in range(0, len(array_users)):
+#         cursor.execute("SELECT * FROM ratings WHERE user_id = (%s) AND session_id = (%s)", (array_users[i], session_id,))
+#         user_ratings.append(cursor.fetchall())
+#     print(user_ratings)
 
-    conn.commit()
-    conn.close()
-    return 0
+#     conn.commit()
+#     conn.close()
+#     return 0
 
 @app.route('/sessions/<int:session_id>/select-song/<int:song_id>', methods=['POST'])
 def select_song(session_id, song_id):
     # select song that will play next
     # used to track history of songs played to avoid redunant recommendations
+    # only modify has_not_been_listened
+    return jsonify({'message': "Song marked as listened to!"})
+
+@app.route('/recommendations', methods=['GET'])
+def get_recs():
+
+
+    # return jsonify({'top_3': })
     return 0
-
-
 
 
 
