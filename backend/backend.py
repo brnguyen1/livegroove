@@ -215,7 +215,19 @@ def add_rating():
     
     sorted_song_recommend =  dict(sorted(song_recommend.items(), key=lambda item: item[1], reverse=True))
     global top_songs
+    global have_not_listened
+    songs_want = []
     top_songs = dict(sorted_song_recommend[:3])
+    i = 0
+    for key in sorted_song_recommend:
+        if i == 3:
+            break
+        if key in have_not_listened:
+            songs_want[key] = have_not_listened[key]
+            i += 1
+
+    top_songs = songs_want
+
     conn.commit()
     conn.close()
 
@@ -252,10 +264,11 @@ def display_songs(session_id):
     
 
     all_songs = get_all_playlist_tracks(read_playlist_sp(), "spotify:playlist:6wj42BHCJPop77cj6JgfLH")
-    have_not_listened = []
+    # needs testing
+    have_not_listened = {}
     for i in range(0, len(all_songs)):
         if not any(i in item for item in array_songs):
-            have_not_listened.append(all_songs[i])
+            have_not_listened[i] = all_songs[i]
     return jsonify({'songs_left': have_not_listened})
 
 # @app.route('/sessions/<int:session_id>/ratings/<int:song_id>', methods=['POST','PUT'])
@@ -284,7 +297,21 @@ def update_songs_cf(session_id):
 def select_song(session_id, song_id):
     # select song that will play next
     # used to track history of songs played to avoid redunant recommendations
-    return 0
+    global top_songs
+
+     
+    global have_not_listened
+    for key in have_not_listened:
+        if key == song_id:
+            del have_not_listened[key]
+
+    return jsonify({'message': 'Song marked as listend to'})
+
+@app.route('/recommendations>', methods=['GET'])
+def get_recs():
+    global top_songs
+    # getting ints already sorted name, image, and artist of the top 3 tracks
+    return jsonify({'top3': top_songs})
 
 
 
