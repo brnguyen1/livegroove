@@ -4,7 +4,7 @@ from collections import defaultdict
 import psycopg2
 from psycopg2 import sql
 import os
-import sqlite3
+from spotify_api import get_all_playlist_tracks, read_playlist_sp
 
 app = Flask(__name__)
 CORS(app)
@@ -192,10 +192,24 @@ def add_rating():
 
 # Add more endpoints as needed
 
-@app.route('/sessions/songs', methods=['GET'])
-def display_songs():
+# @app.route('/sessions/songs', methods=['GET'])
+@app.route('/sessions/<int:session_id>/songs', methods=['GET'])
+def display_songs(session_id):
     # used to display info of songs that haven't been played
-    return 0
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT DISTINCT song_id FROM ratings WHERE session_id = (%s)", (session_id,))
+    array_songs = cursor.fetchall()
+    conn.commit()
+    conn.close()
+    
+
+    all_songs = get_all_playlist_tracks(read_playlist_sp(), "spotify:playlist:6wj42BHCJPop77cj6JgfLH")
+    have_not_listened = []
+    for i in range(0, len(all_songs)):
+        if not any(i in item for item in array_songs):
+            have_not_listened.append(all_songs[i])
+    return jsonify({'songs_left': have_not_listened})
 
 # @app.route('/sessions/<int:session_id>/ratings/<int:song_id>', methods=['POST','PUT'])
 @app.route('/sessions/<int:session_id>/ratings', methods=['POST','PUT'])
@@ -224,6 +238,9 @@ def select_song(session_id, song_id):
     # select song that will play next
     # used to track history of songs played to avoid redunant recommendations
     return 0
+
+
+
 
 
 @app.route('/', methods=['GET'])
