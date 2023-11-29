@@ -67,7 +67,8 @@ def get_db_connection():
 # am i allowed global variables here?
 active_sessions = {}
 session_users = defaultdict(int)
-
+rated_songs = []
+top_songs = []
 
 @app.route('/sessions', methods=['POST'])
 def create_session():
@@ -154,6 +155,9 @@ def add_rating():
     session_id = data.get('session_id')
     song_id = data.get('song_id')
     rating = data.get('rating')
+    
+    global rated_songs
+    rated_songs.append(song_id)
 
 
     conn = get_db_connection()
@@ -169,7 +173,39 @@ def add_rating():
     else:
         cursor.execute("INSERT INTO ratings (user_id, session_id, song_id, rating) VALUES (%s,%s,%s,%s)", (user_id,session_id,song_id,rating,))
 
-    # cursor.execute("INSERT INTO ratings (user_id, session_id, song_id, rating) VALUES (%s,%s,%s,%s) ON CONFLICT (user_id, session_id, song_id) DO UPDATE SET user_id = EXCLUDED.user_id, session_id = EXCLUDED.session_id, song_id = EXCLUDED.song_id, rating = EXCLUDED.rating", (user_id,session_id,song_id,rating,) )
+    
+    
+    cursor.execute("SELECT rating FROM ratings WHERE session_id = (%s) AND song_id = (%s)", (session_id,song_id,))
+    ratings = cursor.fetchall()
+    if any(0 in item for item in ratings):
+        # Dont do math yet
+        print("Still waiting on other users in session to rate song...")
+    else:
+        # Do Math
+        # AVG RATING
+        average_rating = 0
+        for i in range(0, len(ratings)):
+            average_rating += int(ratings[i][0])
+        average_rating = float(average_rating)/float(len(ratings))
+        # r_u,j ->
+        print("AVERAGE:::", average_rating)
+        # -----------------------------------------------------------------------------------------
+        #COS SIM
+        global rated_songs
+        rated_songs.append(song_id)
+        catalog_rated = []
+        cursor.execute("SELECT rating FROM ratings WHERE song_id = (%s)", (song_id,))
+        song_just_rated = cursor.fetchall()
+        # get list of song_ids in session, loop through to get ratings of that is not equal to song_id
+        cursor.execute("SELECT DISTINCT song_id FROM ratings")
+        song_ids = cursor.fetchall()
+        if rated_songs not in song_ids:
+            cursor.execute("SELECT rating FROM ratings WHERE song_id = (%s)", (song_id,))
+            catalog_rated.append(cursor.fetchall())
+        
+        print(catalog_rated)
+
+    
     conn.commit()
     conn.close()
 
@@ -203,6 +239,7 @@ def display_songs(session_id):
     conn.commit()
     conn.close()
     
+    
 
     all_songs = get_all_playlist_tracks(read_playlist_sp(), "spotify:playlist:6wj42BHCJPop77cj6JgfLH")
     have_not_listened = []
@@ -235,6 +272,7 @@ def update_songs_cf(session_id):
 
 @app.route('/sessions/<int:session_id>/select-song/<int:song_id>', methods=['POST'])
 def select_song(session_id, song_id):
+    global top_songs
     # select song that will play next
     # used to track history of songs played to avoid redunant recommendations
     return 0
