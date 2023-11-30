@@ -1,5 +1,5 @@
 import Header from "../components/Header";
-import {createSession} from "../api/api"
+import {createSession, getRemainingSongInfo} from "../api/api"
 import { useNavigate } from "react-router-dom";
 
 export default function Home(){
@@ -7,7 +7,6 @@ export default function Home(){
 
     const onCreateRoom = async () => {
         await createSession().then(data => {
-            console.log(data["data"]["session_id"])
             navigate("/" + data["data"]["session_id"])
         })
     }

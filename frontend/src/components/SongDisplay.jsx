@@ -4,13 +4,8 @@ import { Rating } from "@mui/material";
 import { sendRating } from "../api/api";
 
 export default function SongDisplay(props) {
-    let {session_id} = props;
+    let {session_id, onRate} = props;
     const [rating, setRating] = useState(0)
-    
-    function changeRating(new_rating){
-        setRating(new_rating);
-        sendRating(session_id, 1, rating)
-    }
 
     return(
         <div className="flex flex-col h-5/6 w-2/3 border my-24 m-auto">
@@ -23,7 +18,8 @@ export default function SongDisplay(props) {
                         <Rating
                             value={rating}
                             onChange={(event, new_rating) => {
-                                changeRating(new_rating);
+                                setRating(new_rating);
+                                onRate(new_rating);
                             }}
                             size="large"
                         />

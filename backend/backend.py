@@ -10,6 +10,45 @@ from itertools import islice
 
 app = Flask(__name__)
 CORS(app)
+
+# HELPER FUNCTIONS (cos_sim, etc.) 
+def get_sim_scores_to_song(item_session_matrix, song: int, session: int = None):
+    res = [] 
+
+    itemA = item_session_matrix[song]
+
+    # Compute all similarity scores and append similaritiy scores that user has rated
+    for i, song_scores in enumerate(item_session_matrix):
+        if i == song or (session and item_session_matrix[i][session] == 0):
+            continue
+
+        itemB = np.array(song_scores)
+        res.append([i, np.dot(itemA, itemB) / (np.linalg.norm(itemA) * np.linalg.norm(itemB))])
+
+    return res
+
+def calc_missing_ratings(item_session_matrix, session: int):
+    res = []
+
+    # Predict scores for missing ratings
+    for i in range(123):
+        rating = item_session_matrix[i][session]
+        if rating > 0:
+            continue
+
+        # Get similarity from users that HAVE rated missing items
+        k_sim_items = get_sim_scores_to_song(item_session_matrix, session)
+        prediction = 0
+        sim_sum = 0
+        for item_i, sim in k_sim_items:
+            prediction += sim * item_session_matrix[item_i][session]
+            sim_sum += abs(sim)
+
+        prediction = prediction / sim_sum
+        res.append((prediction, i))
+
+    return res
+
 # SQLite database setup
 
 def get_db_connection():
@@ -26,43 +65,6 @@ def get_db_connection():
         print(f"Error connecting to database: {e}")
         print("Connection not Successful")
         return None
-    # conn = sqlite3.connect(DATABASE)
-    # cursor = conn.cursor()
-
-#     # Create tables if they don't exist
-#     cursor.execute("""
-#     CREATE TABLE IF NOT EXISTS sessions (
-#         session_id SERIAL PRIMARY KEY,
-#         session_name VARCHAR
-#     )
-#     """)
-
-#     cursor.execute("""
-#     CREATE TABLE IF NOT EXISTS users (
-#         user_id SERIAL PRIMARY KEY
-#     )
-#     """)
-    
-#     cursor.execute("""
-#     CREATE TABLE IF NOT EXISTS ratings (
-#         user_id SERIAL,
-#         session_id SERIAL,
-#         song_id INTEGER,
-#         rating INTEGER,
-#         CONSTRAINT fk_sessions
-#         FOREIGN KEY(session_id) 
-# 	      REFERENCES sessions(sessions_id),
-#         CONSTRAINT fk_users
-#         FOREIGN KEY(user_id)
-#         REFERENCES users(user_id)
-#     )
-#     """)
-
-#     conn.commit()
-#     conn.close()
-
-# # Initialize the database
-# init_db()
 
 # API endpoints
 
@@ -94,23 +96,17 @@ def create_session():
         response = make_response('Resposne')
         response.set_cookie('user_id', value=str(user_id))
         print("USER ID", user_id)
-        #initialize ratings for user
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        for i in range(0, 123):
-            cursor.execute("""INSERT INTO ratings(user_id, song_id, rating, session_id) VALUES (%s, %s, %s, %s)""", (user_id, i, 0, session_id,))
-        conn.commit()
-        conn.close()
 
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""INSERT INTO sessions (session_name) VALUES (%s) RETURNING session_id""", (session_name,))
-    session_id = cursor.fetchall()[0][0]
+    sql_data = cursor.fetchall()[0]
+    session_id = sql_data[0]
     conn.commit()
     conn.close()
 
     global active_sessions
-    active_sessions[session_id[0]] = False
+    active_sessions[session_id] = False
 
     return jsonify({'session_id': session_id})
 
@@ -143,8 +139,13 @@ def join_session(session_id):
         #initialize ratings for user
         conn = get_db_connection()
         cursor = conn.cursor()
+        stmt = "INSERT INTO ratings(user_id, song_id, rating, session_id) VALUES "
         for i in range(0, 123):
-            cursor.execute("""INSERT INTO ratings(user_id, song_id, rating, session_id) VALUES (%s, %s, %s, %s)""", (user_id, i, 0, session_id,))
+            stmt += f"({user_id}, {i}, 0, {session_id})"
+            if i < 122:
+                stmt += ", "
+        # print(stmt)
+        cursor.execute(stmt)
         conn.commit()
         conn.close()
 
@@ -167,99 +168,56 @@ def start_session(session_id):
 def add_rating():
     # Add or update a rating
     data = request.get_json()
-    user_id = data.get('user_id')
-    session_id = data.get('session_id')
-    song_id = data.get('song_id')
-    rating = data.get('rating')
+    user_id = int(data.get('user_id'))
+    session_id = int(data.get('session_id'))
+    song_id = int(data.get('song_id'))
+    rating = int(data.get('rating'))
     
     global rated_songs
     rated_songs.append(int(song_id))
 
-
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM ratings WHERE user_id = (%s) AND song_id = (%s)", (user_id, song_id,))
-    try:
-        isDup = cursor.fetchall()[0]
-    except:
-        isDup = None
-    
-    if isDup:
-        cursor.execute("UPDATE ratings SET user_id = (%s), session_id = (%s), song_id = (%s), rating = (%s) WHERE user_id = (%s) AND song_id = (%s)", (user_id, session_id,song_id,rating,user_id,song_id,))
-    else:
-        cursor.execute("INSERT INTO ratings (user_id, session_id, song_id, rating) VALUES (%s,%s,%s,%s)", (user_id,session_id,song_id,rating,))
+    cursor.execute("UPDATE ratings SET user_id = (%s), session_id = (%s), song_id = (%s), rating = (%s) WHERE user_id = (%s) AND song_id = (%s)", (user_id, session_id,song_id,rating,user_id,song_id,))
 
-    
-    
-    cursor.execute("SELECT rating FROM ratings WHERE session_id = (%s) AND song_id = (%s)", (session_id,song_id,))
+    cursor.execute("SELECT rating FROM ratings WHERE session_id = (%s) AND song_id = (%s) AND rating > 0", (session_id,song_id,))
     ratings = cursor.fetchall()
-    song_recommend = {}
 
-    if any(0 in item for item in ratings):
-        # Dont do math yet
-        print("Still waiting on other users in session to rate song...")
-    else:
-        # Do Math
-        # AVG RATING
-        average_rating = 0
-        for i in range(0, len(ratings)):
-            average_rating += int(ratings[i][0])
-        average_rating = float(average_rating)/float(len(ratings))
-        # r_u,j ->
-        print("AVERAGE:::", average_rating)
-        # -----------------------------------------------------------------------------------------
-        #COS SIM
-        # rated_songs.append(song_id)
-        catalog_rated = []
-        # get list of song_ids in session, loop through to get ratings of that is not equal to song_id
-        cursor.execute("SELECT DISTINCT song_id FROM ratings")
-        song_ids = cursor.fetchall()
-        for i in range(0, len(song_ids)):
-            if song_ids[i][0] not in rated_songs:
-                catalog_rated.append(song_ids[i])
-
-        compare_ratings = []
-        cursor.execute("SELECT rating FROM ratings WHERE song_id = (%s)", (song_id))
-        current_song_ratings = cursor.fetchall()
-
-
-        the_song = np.array(current_song_ratings).T
-
-        for i in range(0, len(catalog_rated)):
-            cursor.execute("SELECT rating FROM ratings WHERE song_id = (%s)", (catalog_rated[i],))
-            catalog_ratings = cursor.fetchall()
-
-            comp_song = np.array(catalog_ratings)
-            
-            song_recommend[catalog_rated[i]] = np.dot(the_song, comp_song) / np.linalg.norm(the_song) * np.linalg.norm(comp_song)
+    # Do Math
+    # AVG RATING
+    average_rating = 0
+    for i in range(0, len(ratings)):
+        average_rating += int(ratings[i][0])
+    average_rating = float(average_rating)/float(len(ratings))
+    # r_u,j ->
+    print("AVERAGE:::", average_rating)
+    # -----------------------------------------------------------------------------------------
     
-    sorted_song_recommend =  dict(sorted(song_recommend.items(), key=lambda item: item[1], reverse=True))
-    global top_songs
-    top_songs = dict(islice(sorted_song_recommend.items(),3))
-
+    #COS SIM
+    # rated_songs.append(song_id)
+    catalog_rated = []
+    # get list of song_ids in session, loop through to get ratings of that is not equal to song_id
+    cursor.execute("SELECT session_id, song_id, rating FROM ratings")
+    ratings_stmt_ret = cursor.fetchall()
+    cursor.execute("SELECT MAX(session_id) from sessions")
+    sessions_cnt = cursor.fetchall()[0][0] + 1
+    song_session_matrix = [[0] * sessions_cnt for i in range(123)]
+    
+    for ses_id, sng_id, r in ratings_stmt_ret:
+        song_session_matrix[sng_id][ses_id] = r
+    
+    predictions = calc_missing_ratings(song_session_matrix, session_id)
+    
+    predictions.sort(key = lambda x: x[0])
+    # global top_songs
+    top_songs = predictions[0:3]
+    
     print("TOP 3 SONGS::", top_songs)
     conn.commit()
     conn.close()
 
     # return recommendation vector
-    return jsonify({'message': 'Rating added/updated successfully'})
-
-# @app.route('/ratings/<int:session_id>', methods=['GET'])
-# def get_rating_vectors(session_id):
-#     # Get rating vectors for the specified session
-#     conn = sqlite3.connect(DATABASE)
-#     cursor = conn.cursor()
-#     cursor.execute("""
-#         SELECT user_id, song_id, rating
-#         FROM ratings
-#         WHERE session_id = ?
-#     """, (session_id,))
-#     rating_vectors = cursor.fetchall()
-#     conn.close()
-
-#     return jsonify({'rating_vectors': rating_vectors})
-
-# Add more endpoints as needed
+    return jsonify({'top_songs': [i for pred, i in top_songs]})
 
 # @app.route('/sessions/songs', methods=['GET'])
 @app.route('/sessions/<int:session_id>/songs', methods=['GET'])
@@ -272,37 +230,14 @@ def display_songs(session_id):
     conn.commit()
     conn.close()
     
-    
-
     all_songs = get_all_playlist_tracks(read_playlist_sp(), "spotify:playlist:6wj42BHCJPop77cj6JgfLH")
+    print(all_songs)
     # needs testing
     have_not_listened = {}
     for i in range(0, len(all_songs)):
         if not any(i in item for item in array_songs):
             have_not_listened[i] = all_songs[i]
     return jsonify({'songs_left': have_not_listened})
-
-# @app.route('/sessions/<int:session_id>/ratings/<int:song_id>', methods=['POST','PUT'])
-@app.route('/sessions/<int:session_id>/ratings', methods=['POST','PUT'])
-# def update_songs_cf(session_id):
-#     # update song in session ratings vector
-#     #create a user-item matrix
-#     #
-#     user_ratings = []
-#     conn = get_db_connection()
-#     cursor = conn.cursor()
-#     # getting all rating of a user from a session
-#     cursor.execute("SELECT DISTINCT user_id FROM ratings WHERE session_id = (%s)", (session_id,))
-#     array_users = cursor.fetchall()
-
-#     for i in range(0, len(array_users)):
-#         cursor.execute("SELECT * FROM ratings WHERE user_id = (%s) AND session_id = (%s)", (array_users[i], session_id,))
-#         user_ratings.append(cursor.fetchall())
-#     print(user_ratings)
-
-#     conn.commit()
-#     conn.close()
-#     return 0
 
 @app.route('/sessions/<int:session_id>/select-song/<int:song_id>', methods=['POST'])
 def select_song(session_id, song_id):
@@ -325,14 +260,10 @@ def get_recs():
     # getting ints already sorted name, image, and artist of the top 3 tracks
     return jsonify({'top3': top_songs})
 
-
-
 @app.route('/', methods=['GET'])
 def index():
     conn = get_db_connection()
     conn.close()
-
-
 
 if __name__ == '__main__':
     app.run(debug=True)
