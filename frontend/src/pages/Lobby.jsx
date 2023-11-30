@@ -1,9 +1,10 @@
 import { useParams } from "react-router-dom"
 import Header from "../components/Header"
-import SongDisplay from "../components/SongDisplay";
 import { useEffect, useState } from "react";
 import { getSessions, sendRating, startSession } from "../api/api";
 import LobbyWaiting from "../components/LobbyWaiting";
+import CurrentSong from "../components/CurrentSong";
+import SongBanner from "../components/SongBanner";
 
 
 export default function Lobby() {
@@ -12,6 +13,8 @@ export default function Lobby() {
     const [user_id, setUserId] = useState(null);
     const [song_id, setSongId] = useState(null);
     const [recommendedSongs, setRecommendedSongs] = useState(null);
+    const [queuedSong, setQueuedSong] = useState(null)
+
     useEffect(() => {
         getSessions(session_id).then(data => {
             setUserId(data["data"]["user_id"]);
@@ -28,14 +31,35 @@ export default function Lobby() {
 
     const onRate = (rating) => {
         sendRating(session_id, user_id, song_id, rating).then(res => {
-            console.log(res)
+            setRecommendedSongs(res["data"]["top_songs"])
+            console.log(recommendedSongs)
         })
     }
 
+    const onNext = () => {
+        if(queuedSong) {
+            setSongId(queuedSong)
+            setQueuedSong(null)
+            setRecommendedSongs(null)
+        }
+    }
+
+    // Song Display
+    let song_display =
+    <div className="flex flex-col h-5/6 w-2/3 border my-24 m-auto">
+        <CurrentSong onRate={onRate} onNext={onNext} song_id={song_id}/>
+        <div className="flex flex-col my-auto gap-y-5">
+                {recommendedSongs ? recommendedSongs.map(song => {
+                    return <SongBanner key={song} song_name={song} onQueue={() => setQueuedSong(song)} selected={queuedSong === song}/>
+                }) : null}
+        </div>
+
+    </div>
+ 
     return(
         <div className="flex h-screen w-screen content-center">
         <Header/>
-        {sessionStart ? <SongDisplay session_id={session_id} onRate={onRate}/> : <LobbyWaiting onStart={onStart}/>}
+        {sessionStart ? song_display : <LobbyWaiting onStart={onStart}/>}
         </div>
     )
 }
