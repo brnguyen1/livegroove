@@ -7,4 +7,4 @@ flask==2.2.5
 gunicorn==19.7.1
 flask_cors==4.0.0
 psycopg2==2.9.9
-numpy==1.261.6
+numpy==1.21.6
