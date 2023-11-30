@@ -6,6 +6,7 @@ import numpy as np
 from psycopg2 import sql
 import os
 from spotify_api import get_all_playlist_tracks, read_playlist_sp
+from itertools import islice
 
 app = Flask(__name__)
 CORS(app)
@@ -109,7 +110,7 @@ def create_session():
     conn.close()
 
     global active_sessions
-    active_sessions[session_id] = False
+    active_sessions[session_id[0]] = False
 
     return jsonify({'session_id': session_id})
 
@@ -172,7 +173,7 @@ def add_rating():
     rating = data.get('rating')
     
     global rated_songs
-    rated_songs.append(song_id)
+    rated_songs.append(int(song_id))
 
 
     conn = get_db_connection()
@@ -192,6 +193,8 @@ def add_rating():
     
     cursor.execute("SELECT rating FROM ratings WHERE session_id = (%s) AND song_id = (%s)", (session_id,song_id,))
     ratings = cursor.fetchall()
+    song_recommend = {}
+
     if any(0 in item for item in ratings):
         # Dont do math yet
         print("Still waiting on other users in session to rate song...")
@@ -206,42 +209,35 @@ def add_rating():
         print("AVERAGE:::", average_rating)
         # -----------------------------------------------------------------------------------------
         #COS SIM
-        global rated_songs 
-        song_recommend = {}
-        rated_songs.append(song_id)
+        # rated_songs.append(song_id)
         catalog_rated = []
         # get list of song_ids in session, loop through to get ratings of that is not equal to song_id
         cursor.execute("SELECT DISTINCT song_id FROM ratings")
         song_ids = cursor.fetchall()
-        if rated_songs not in song_ids:
-            cursor.execute("SELECT rating FROM ratings WHERE song_id = (%s)", (song_id,))
-            catalog_rated.append(cursor.fetchall())
-        
-        for song in rated_songs:
-            cursor.execute("SELECT rating FROM ratings WHERE song_id = (%s)", (song,))
-            compare_ratings = cursor.fetchall()
+        for i in range(0, len(song_ids)):
+            if song_ids[i][0] not in rated_songs:
+                catalog_rated.append(song_ids[i])
+
+        compare_ratings = []
+        cursor.execute("SELECT rating FROM ratings WHERE song_id = (%s)", (song_id))
+        current_song_ratings = cursor.fetchall()
+
+
+        the_song = np.array(current_song_ratings).T
+
+        for i in range(0, len(catalog_rated)):
+            cursor.execute("SELECT rating FROM ratings WHERE song_id = (%s)", (catalog_rated[i],))
+            catalog_ratings = cursor.fetchall()
+
+            comp_song = np.array(catalog_ratings)
             
-        rating_arr = np.array(compare_ratings)
-        catalog_arr = np.array(catalog_rated)
-        for i, items_scores in enumerate(catalog_arr):
-            itemB = np.array(items_scores)
-            song_recommend[i] = np.dot(rating_arr, itemB) / np.linalg.norm(rating_arr) * np.linalg.norm(itemB)
+            song_recommend[catalog_rated[i]] = np.dot(the_song, comp_song) / np.linalg.norm(the_song) * np.linalg.norm(comp_song)
     
     sorted_song_recommend =  dict(sorted(song_recommend.items(), key=lambda item: item[1], reverse=True))
     global top_songs
-    global have_not_listened
-    songs_want = []
-    top_songs = dict(sorted_song_recommend[:3])
-    i = 0
-    for key in sorted_song_recommend:
-        if i == 3:
-            break
-        if key in have_not_listened:
-            songs_want[key] = have_not_listened[key]
-            i += 1
+    top_songs = dict(islice(sorted_song_recommend.items(),3))
 
-    top_songs = songs_want
-
+    print("TOP 3 SONGS::", top_songs)
     conn.commit()
     conn.close()
 
