@@ -1,4 +1,4 @@
- {
+{
   "0": {
     "track": "Faithfully",
     "artist": "Journey",
@@ -598,5 +598,20 @@
     "track": "HELL/HEAVEN",
     "artist": "keshi",
     "image": "https://i.scdn.co/image/ab67616d0000b27319aff2da63b211d75341e8eb"
+  },
+  "120": {
+    "track": "After The Storm (feat. Tyler, The Creator & Bootsy Collins)",
+    "artist": "Kali Uchis",
+    "image": "https://i.scdn.co/image/ab67616d0000b27390b4e1905b1fc48c537ec053"
+  },
+  "121": {
+    "track": "TAKE IT OFF",
+    "artist": "Wooks",
+    "image": "https://i.scdn.co/image/ab67616d0000b273f8d9db0abeeea9e7a1a9ebfb"
+  },
+  "122": {
+    "track": "ZOMBIES",
+    "artist": "pH-1",
+    "image": "https://i.scdn.co/image/ab67616d0000b27302ab0f34acddd0293503ff76"
   }
 }

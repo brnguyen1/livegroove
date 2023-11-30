@@ -46,7 +46,11 @@ def calc_missing_ratings(item_session_matrix, session: int):
                 continue
             prediction += sim * item_session_matrix[item_j][session]
             sim_sum += abs(sim)
-        prediction = prediction / sim_sum
+        
+        if sim_sum == 0:
+            prediction = 3    
+        else:
+            prediction = prediction / sim_sum
         res.append((prediction, i))
 
     return res
