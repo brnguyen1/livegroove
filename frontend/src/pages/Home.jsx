@@ -1,7 +1,6 @@
 import Header from "../components/Header";
-import {createSession, getRemainingSongInfo} from "../api/api"
+import {createSession} from "../api/api"
 import { useNavigate } from "react-router-dom";
-import { useEffect } from "react";
 
 export default function Home(){
     const navigate = useNavigate();
@@ -11,10 +10,6 @@ export default function Home(){
             navigate("/" + data["data"]["session_id"])
         })
     }
-
-    useEffect(() => {
-        getRemainingSongInfo(8)
-    })
 
     return(
         <div className="flex h-screen w-screen">
