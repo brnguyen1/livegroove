@@ -1,3 +1,4 @@
+import SampleInfo from "../../assets/sample_info.json"
 
 export default function SongBanner(props){
     let { image, song_name, onQueue, selected } = props
@@ -6,7 +7,8 @@ export default function SongBanner(props){
 
     return(
     <div className={"flex border" + border + " rounded h-12 w-4/5 m-auto"}>
-        <div className="bg-green-700 w-1/5 h-full mr-auto" />
+        <div className="bg-green-700 w-1/5 h-full mr-auto" >
+        </div>
             
         <div className="flex w-4/5">
             <div className="flex w-5/6 m-auto">

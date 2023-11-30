@@ -41,14 +41,11 @@ def calc_missing_ratings(item_session_matrix, session: int):
 
         prediction = 0
         sim_sum = 0
-        cnt = 0
         for item_j, sim in sim_scores:
             if item_session_matrix[item_j][session] == 0:
                 continue
-            cnt += 1
             prediction += sim * item_session_matrix[item_j][session]
             sim_sum += abs(sim)
-        print(cnt)
         prediction = prediction / sim_sum
         res.append((prediction, i))
 
@@ -217,7 +214,6 @@ def add_rating():
     predictions.sort(key = lambda x: x[0], reverse=True)
     # global top_songs
     top_songs = predictions[0:3]
-    print([pred for pred, i in predictions])
     print("TOP 3 SONGS::", top_songs)
     conn.commit()
     conn.close()
