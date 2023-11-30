@@ -12,19 +12,19 @@ app = Flask(__name__)
 CORS(app)
 
 # HELPER FUNCTIONS (cos_sim, etc.) 
-def get_sim_scores_to_song(item_session_matrix, song: int, session: int = None):
+def get_sim_scores_to_song(item_session_matrix, song: int):
     res = [] 
 
     itemA = item_session_matrix[song]
 
     # Compute all similarity scores and append similaritiy scores that user has rated
     for i, song_scores in enumerate(item_session_matrix):
-        if i == song or (session and item_session_matrix[i][session] == 0):
+        if i == song:
             continue
 
         itemB = np.array(song_scores)
         res.append([i, np.dot(itemA, itemB) / (np.linalg.norm(itemA) * np.linalg.norm(itemB))])
-
+    
     return res
 
 def calc_missing_ratings(item_session_matrix, session: int):
@@ -37,13 +37,18 @@ def calc_missing_ratings(item_session_matrix, session: int):
             continue
 
         # Get similarity from users that HAVE rated missing items
-        k_sim_items = get_sim_scores_to_song(item_session_matrix, session)
+        sim_scores = get_sim_scores_to_song(item_session_matrix, i)
+
         prediction = 0
         sim_sum = 0
-        for item_i, sim in k_sim_items:
-            prediction += sim * item_session_matrix[item_i][session]
+        cnt = 0
+        for item_j, sim in sim_scores:
+            if item_session_matrix[item_j][session] == 0:
+                continue
+            cnt += 1
+            prediction += sim * item_session_matrix[item_j][session]
             sim_sum += abs(sim)
-
+        print(cnt)
         prediction = prediction / sim_sum
         res.append((prediction, i))
 
@@ -207,11 +212,12 @@ def add_rating():
         song_session_matrix[sng_id][ses_id] = r
     
     predictions = calc_missing_ratings(song_session_matrix, session_id)
+    print(len(predictions))
     
-    predictions.sort(key = lambda x: x[0])
+    predictions.sort(key = lambda x: x[0], reverse=True)
     # global top_songs
     top_songs = predictions[0:3]
-    
+    print([pred for pred, i in predictions])
     print("TOP 3 SONGS::", top_songs)
     conn.commit()
     conn.close()
