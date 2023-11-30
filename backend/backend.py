@@ -105,7 +105,7 @@ def create_session():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""INSERT INTO sessions (session_name) VALUES (%s) RETURNING session_id""", (session_name,))
-    session_id = cursor.fetchall()[0]
+    session_id = cursor.fetchall()[0][0]
     conn.commit()
     conn.close()
 
