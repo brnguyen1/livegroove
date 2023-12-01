@@ -45,7 +45,7 @@ export default function Lobby() {
         }
     }
 
-    // Song Display
+    // Displays
     let song_display =
     <div className="flex flex-col h-5/6 w-2/3 border my-24 m-auto">
         
@@ -57,11 +57,16 @@ export default function Lobby() {
         </div>
 
     </div>
+
+    let lobby_display =
+    <>
+    {user_id ? <LobbyWaiting onStart={onStart}/> : null}
+    </> 
  
     return(
         <div className="flex h-screen w-screen content-center">
         <Header/>
-        {sessionStart ? song_display : <LobbyWaiting onStart={onStart}/>}
+        {sessionStart ? song_display : lobby_display}
         </div>
     )
 }
